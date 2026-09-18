@@ -1,0 +1,38 @@
+======================================================================
+Building dataset...
+[load_aspirin] OK: N=100000 frames, 21 atoms/frame, composition C9H8O4
+[load_aspirin] energy range: [-406293.90, -406236.35]
+[load_aspirin] coord range:  [-4.660, 4.294]
+[load_aspirin] force RMS:    29.364
+Fixed training budget shared by all 3 models: 400 frames (val=300, test=300)
+
+[1/3] Training geometry-agnostic classical FFN (raw flattened coords)...
+  done in 0.0s, test MAE=5.1238
+
+[2/3] Training geometry-aware classical FFN (invariant distance/RBF features)...
+  done in 0.3s, test MAE=4.9952
+
+[3/3] Training EQNN Track A (8 qubits, invariant encoding + SU(2)-equivariant layers)...
+  [EQNN] epoch 01/6  train_mse=1.0011  val_mse=0.8589
+  [EQNN] epoch 02/6  train_mse=0.9957  val_mse=0.8429
+  [EQNN] epoch 03/6  train_mse=1.0279  val_mse=0.8078
+  [EQNN] epoch 04/6  train_mse=1.0219  val_mse=0.7922
+  [EQNN] epoch 05/6  train_mse=0.9907  val_mse=0.8045
+  [EQNN] epoch 06/6  train_mse=0.9707  val_mse=0.8104
+  done in 85.1s, test MAE=5.0230
+
+Running rotation/reflection and permutation invariance diagnostics...
+  Geometry-agnostic classical (raw coords): rot_err(mean/max)=2.274e+00/4.521e+00  perm_err(mean/max)=1.291e+00/4.397e+00
+  Geometry-aware classical (invariant features): rot_err(mean/max)=0.000e+00/0.000e+00  perm_err(mean/max)=0.000e+00/0.000e+00
+  EQNN Track A (quantum): rot_err(mean/max)=0.000e+00/0.000e+00  perm_err(mean/max)=0.000e+00/0.000e+00
+
+====================================================================================================
+Model                                         Qubits   Params        MAE      RMSE       R2
+----------------------------------------------------------------------------------------------------
+Mean baseline                                 -        1          5.1040    6.3275  -0.0204
+Geometry-agnostic classical (raw coords)      -        10881      5.1238    6.3429  -0.0254
+Geometry-aware classical (invariant features) -        12993      4.9952    6.2010   0.0200
+EQNN Track A (quantum)                        8->2     8          5.0230    6.2060   0.0184
+====================================================================================================
+
+Saved: results/results.json and plots/*.png

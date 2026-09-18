@@ -1,0 +1,67 @@
+{
+  "metrics": {
+    "Mean baseline": {
+      "MAE": 5.104029025841931,
+      "RMSE": 6.327462019148495,
+      "R2": -0.02039442171151884,
+      "qubits": "-",
+      "params": 1,
+      "depth": "-",
+      "rotation_error": "-",
+      "permutation_error": "-"
+    },
+    "Geometry-agnostic classical (raw coords)": {
+      "MAE": 5.123845472066702,
+      "RMSE": 6.3428504658731555,
+      "R2": -0.025363674533959824,
+      "qubits": "-",
+      "params": 10881,
+      "depth": 5,
+      "rotation_error": "2.27e+00 (max 4.52e+00)",
+      "permutation_error": "1.29e+00 (max 4.40e+00)"
+    },
+    "Geometry-aware classical (invariant features)": {
+      "MAE": 4.995180537910783,
+      "RMSE": 6.2010363523838015,
+      "R2": 0.019974138067139324,
+      "qubits": "-",
+      "params": 12993,
+      "depth": 5,
+      "rotation_error": "0.00e+00 (max 0.00e+00)",
+      "permutation_error": "0.00e+00 (max 0.00e+00)"
+    },
+    "EQNN Track A (quantum)": {
+      "MAE": 5.023005304849358,
+      "RMSE": 6.2060099851237505,
+      "R2": 0.018401419191321988,
+      "qubits": "8->2",
+      "params": 8,
+      "depth": "2 conv blocks + 2 pools",
+      "rotation_error": "0.00e+00 (max 0.00e+00)",
+      "permutation_error": "0.00e+00 (max 0.00e+00)"
+    }
+  },
+  "symmetry": {
+    "Geometry-agnostic classical (raw coords)": {
+      "rotation_error_mean": 2.2742579099508777,
+      "rotation_error_max": 4.521314947633073,
+      "permutation_error_mean": 1.290852219714725,
+      "permutation_error_max": 4.396637093392201
+    },
+    "Geometry-aware classical (invariant features)": {
+      "rotation_error_mean": 0.0,
+      "rotation_error_max": 0.0,
+      "permutation_error_mean": 0.0,
+      "permutation_error_max": 0.0
+    },
+    "EQNN Track A (quantum)": {
+      "rotation_error_mean": 0.0,
+      "rotation_error_max": 0.0,
+      "permutation_error_mean": 0.0,
+      "permutation_error_max": 0.0
+    }
+  },
+  "n_train": 400,
+  "n_val": 300,
+  "n_test": 300
+}
