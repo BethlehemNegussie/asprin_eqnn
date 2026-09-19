@@ -60,18 +60,22 @@ class InvariantDescriptor:
         
         rbf_pairs passes the 210 pair distances through 16 Radial Basis Function (Gaussian) bins,
         converting each distance scalar into a 16-dimensional smooth activation vector."""
-        
+
+        # for every frame in the dataset the d_pairs compresses the full 21 x 21 distance grid to a simple 1D array of 210 scalar distances
         d_pairs = D[:, iu, ju]  # [N, n_pairs]
         rbf_pairs = self._rbf(d_pairs)  # [N, n_pairs, n_bins]
 
-        z_pairs = np.stack([np.minimum(Z[iu], Z[ju]), np.maximum(Z[iu], Z[ju])], axis=-1)  # tells us which species pairs we have, [n_pairs,2]
+        z_pairs = np.stack([np.minimum(Z[iu], Z[ju]), np.maximum(Z[iu], Z[ju])], axis=-1)  # tells us which species pairs we have out of the 6 channels, [n_pairs,2]
 
+        """
+        allocate feature tensor, loop through species pairs, select only the relevant pairs and aggregate them
+        """
         feats = np.zeros((N, len(SPECIES_PAIRS), self.n_bins))
         for k, (za, zb) in enumerate(SPECIES_PAIRS):
             mask = (z_pairs[:, 0] == za) & (z_pairs[:, 1] == zb)
             if mask.any():
                 feats[:, k, :] = rbf_pairs[:, mask, :].sum(axis=1)
-        return feats.reshape(N, -1)  # [N, 6*n_bins]
+        return feats.reshape(N, -1)  # flatten to [N, 6*n_bins]
 
     @property
     def out_dim(self):

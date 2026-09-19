@@ -1,6 +1,6 @@
-"""End to end data pipeline, subsampled for a tractable
-in session demonstration run. Full 100,000-frame / 21-qubit training is the
-production target."""
+"""End-to-end data pipeline.
+The full aspirin dataset contains 100,000 frames; this experiment uses
+a fixed 3,000-frame subsample and an equal 400-example training budget."""
 import numpy as np
 from data.load_aspirin import load_raw, validate
 from data.preprocess import center_of_mass_remove, compute_train_scale, make_splits, EnergyNormalizer

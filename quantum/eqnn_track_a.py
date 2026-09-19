@@ -23,21 +23,43 @@ import pennylane as qml
 from pennylane import numpy as pnp
 import numpy as np
 
-N_QUBITS = 8
+N_QUBITS = 8 # Each qubit receives one PCA-derived invariant scalar
 
 
 def _conv_block(active_wires, theta_a, theta_b):
-    """Two brickwork sublayers of shared parameter exp(-i*theta*SWAP) gates."""
+    """A quantum convolution layer that applies local two-qubit 
+    equivariant operations to neighboring/paired qubits.  
+    
+    Two brickwork sublayers of shared parameter exp(-i*theta*SWAP) gates; 
+    pairs_a creates 4 independent, isolated pairs of entangled qubits
+    , by bridging across the previous boundary pairs, pairs_b spreads entanglement 
+    globally across the entire 8-qubit register.
+    """
     pairs_a = list(zip(active_wires[0::2], active_wires[1::2]))
     shifted = active_wires[1:] + active_wires[:1]
-    pairs_b = list(zip(shifted[0::2], shifted[1::2]))
+
+    pairs_b = list(zip(shifted[0::2], shifted[1::2])) # shifts pairing by one qubit
 
     for (w1, w2) in pairs_a:
+        """
+        Implements an isotropic Heisenberg exchange interaction via sequential IsingXX, 
+        IsingYY, and IsingZZ gates parameterized by theta on shared qubits.
+
+        - Physics & Equivalence: Continuously parameterizes the SWAP gate while 
+        conserving total excitation/spin number, unlike CNOT or random rotations.
+        - Expressivity: Learns arbitrary SWAP degrees ranging from no swap (theta=0) 
+        to full exchange (theta=pi/2), controlled by trainable parameters theta_a and theta_b.
+        - Weight Sharing: Constrains the layer to 2 shared parameters (theta_a for even pairs, 
+        theta_b for odd pairs) to enforce uniform spatial transformations, prevent 
+        overfitting, and mitigate barren plateaus.
+        """
+
+
         qml.IsingXX(theta_a, wires=[w1, w2])
         qml.IsingYY(theta_a, wires=[w1, w2])
         qml.IsingZZ(theta_a, wires=[w1, w2])
     for (w1, w2) in pairs_b:
-        if w1 == w2:
+        if w1 == w2: #prevents a self-interaction or applying a two-qubit gate to the same wire twice
             continue
         qml.IsingXX(theta_b, wires=[w1, w2])
         qml.IsingYY(theta_b, wires=[w1, w2])
@@ -46,7 +68,9 @@ def _conv_block(active_wires, theta_a, theta_b):
 
 def _pool(active_wires):
     """2-to-1 equivariant pooling := partial trace
-    keep the first wire of each pair, never act on the dropped wire again."""
+    keep the first wire of each pair, simply stop 
+    applying gates to the discarded qubits and never
+    act on the dropped wire again."""
     kept = active_wires[0::2]
     return kept
 
@@ -54,7 +78,7 @@ def _pool(active_wires):
 dev = qml.device("default.qubit", wires=N_QUBITS)
 
 
-@qml.qnode(dev, interface="autograd")
+@qml.qnode(dev, interface="autograd") # everything inside this function is treated as a differentiable quantum circuit
 def _circuit(angles, theta):
     """angles: [8] invariant encoding angles. theta: [4] circuit params
     (theta_A1, theta_B1, theta_A2, theta_B2)."""
@@ -69,6 +93,7 @@ def _circuit(angles, theta):
     _conv_block(active, theta[2], theta[3])
     active = _pool(active)  # 4 -> 2
 
+    # the quantum circuit outputs the measured q = [XX, YY, ZZ]
     w1, w2 = active
     return (
         qml.expval(qml.PauliX(w1) @ qml.PauliX(w2)),
@@ -89,22 +114,27 @@ def circuit_batch(angles_batch, theta):
 
 
 class EQNNTrackA:
-    """Wraps the circuit and a small linear classical head, trained jointly."""
+    """combines the quantum circuit, classical linear readout and the training, 
+        making it a complete hybrid quantum-classical model"""
 
     def __init__(self, seed: int = 42):
         rng = np.random.default_rng(seed)
-        self.theta = pnp.array(rng.uniform(-0.1, 0.1, size=4), requires_grad=True)
-        self.w = pnp.array(rng.uniform(-0.1, 0.1, size=3), requires_grad=True)
-        self.b = pnp.array(0.0, requires_grad=True)
+        self.theta = pnp.array(rng.uniform(-0.1, 0.1, size=4), requires_grad=True) #four quantum parameters theta E R**4 initialized randomly near zero
+        self.w = pnp.array(rng.uniform(-0.1, 0.1, size=3), requires_grad=True) # three classical weights
+        self.b = pnp.array(0.0, requires_grad=True) # one bias term
 
     def n_params(self):
         return len(self.theta) + len(self.w) + 1
 
     def _forward_one(self, angles, theta, w, b):
+        """
+        the quantum circuit extracts three symmetry-compatible observables,
+        and a tiny classical linear layer turns them into the predicted energy
+        """
         xx, yy, zz = _circuit(angles, theta)
-        return b + w[0] * xx + w[1] * yy + w[2] * zz
+        return b + w[0] * xx + w[1] * yy + w[2] * zz # ffnn regression output
 
-    def predict(self, angles_batch):
+    def predict(self, angles_batch): # predicted value is the normalized energy 
         preds = np.zeros(angles_batch.shape[0])
         for i in range(angles_batch.shape[0]):
             preds[i] = float(self._forward_one(angles_batch[i], self.theta, self.w, self.b))
@@ -112,12 +142,19 @@ class EQNNTrackA:
 
     def train(self, angles_train, y_train, angles_val, y_val,
               epochs=25, batch_size=32, lr=0.05, seed=42, verbose=True):
-        opt = qml.AdamOptimizer(stepsize=lr)
+        opt = qml.AdamOptimizer(stepsize=lr) #Adam to optimize theta, w, b simultaneously
         rng = np.random.default_rng(seed)
         n = angles_train.shape[0]
         history = {"train_loss": [], "val_loss": []}
 
         def huber(pred, target, delta=1.0):
+            """
+            Huber loss used because its mathematical formula transitions 
+            from a quadratic penalty to a linear penalty for errors larger 
+            than delta.  Because the penalty grows linearly instead of quadratically
+            for large errors, large errors don't dominate training as strongly as 
+            they would under pure squared loss.  
+            """
             r = pred - target
             abs_r = pnp.abs(r)
             quad = 0.5 * r ** 2
@@ -140,16 +177,27 @@ class EQNNTrackA:
         mon_val_idx = rng.choice(len(y_val), size=mon_n, replace=False)
 
         for ep in range(epochs):
+            """
+            optimization isn't done over the entire training set at 
+            once but random permutation is taken and each update sees a mini batch
+            """
             perm = rng.permutation(n)
             for start in range(0, n, batch_size):
                 idx = perm[start:start + batch_size]
                 ang_b, y_b = angles_train[idx], y_train[idx]
 
+                """
+                Calculate the Huber loss through the quantum circuit, differentiate 
+                it with respect to the four quantum parameters and four classical 
+                parameters, then update all eight.
+                """
+
                 (self.theta, self.w, self.b), _ = opt.step_and_cost(
                     lambda th, w, b: batch_loss(th, w, b, ang_b, y_b),
                     self.theta, self.w, self.b,
                 )
-
+            # monitoring metrics calculated on a fixed random subset of up to 80 examples
+            # since repeatedly simulating the quantum circuit is expensive
             train_pred = self.predict(angles_train[mon_train_idx])
             val_pred = self.predict(angles_val[mon_val_idx])
             tr_loss = float(np.mean((train_pred - y_train[mon_train_idx]) ** 2))
